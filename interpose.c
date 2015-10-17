@@ -57,29 +57,33 @@ void get_regs(struct user_regs_struct *regs_p) {
     }
 }
 
+void bind_args(struct user_regs_struct *regs_p, unsigned long long *args_p[6]) {
+    args_p[0] = &regs_p->rdi;
+    args_p[1] = &regs_p->rsi;
+    args_p[2] = &regs_p->rdx;
+    args_p[3] = &regs_p->r10;
+    args_p[4] = &regs_p->r8;
+    args_p[5] = &regs_p->r9;
+}
+
 void print_syscall_entry(struct user_regs_struct *regs_p) {
     unsigned long long n = regs_p->orig_rax;
-    unsigned long long args[6] = {
-        regs_p->rdi,
-        regs_p->rsi,
-        regs_p->rdx,
-        regs_p->r10,
-        regs_p->r8,
-        regs_p->r9,
-    };
+    unsigned long long *args_p[6];
     int i;
+
+    bind_args(regs_p, args_p);
 
     printf("%s ( ", ents[n].name);
     if(ents[n].argc < 0) {
         for(i = 0; i < 6; i++) {
-            printf("0x%Lx", args[i]);
+            printf("0x%Lx", *args_p[i]);
             if(i < 5) printf(", ");
             else printf(" )");
         }
         printf("?");
     }else {
         for(i = 0; i < ents[n].argc; i++) {
-            printf("0x%Lx", args[i]);
+            printf("0x%Lx", *args_p[i]);
             if(i < ents[n].argc - 1) printf(", ");
             else printf(" )");
         }
@@ -88,6 +92,47 @@ void print_syscall_entry(struct user_regs_struct *regs_p) {
 
 void print_syscall_exit(struct user_regs_struct *regs_p) {
     printf(" = 0x%Lx\n", regs_p->rax);
+}
+
+void interpose(struct user_regs_struct regs) {
+    unsigned long long *args_p[6];
+
+    if(my_pcy.bypass) return;
+
+    bind_args(&regs, args_p);
+
+    if(my_pcy.number != regs.orig_rax) return;
+
+    if(my_pcy.cond_idx >= 0) {
+        if(my_pcy.cond_idx >= 6) {
+            fprintf(stderr, "Malformed policy.\n");
+            suicide();
+        }
+        if(*args_p[my_pcy.cond_idx] != my_pcy.cond_val) return;
+    }
+
+    if(my_pcy.chg_ref) {
+        if(ptrace(PTRACE_POKEDATA, tracee, *args_p[my_pcy.chg_idx], my_pcy.chg_val) < 0) {
+            perror("ptrace pokedata");
+            suicide();
+        }
+    }else {
+        if(my_pcy.chg_idx < 0) {
+            regs.orig_rax = my_pcy.chg_val;
+        }else if(my_pcy.chg_idx >= 6) {
+            fprintf(stderr, "Malformed policy.\n");
+            suicide();
+        }else {
+            *args_p[my_pcy.chg_idx] = my_pcy.chg_val;
+        }
+        if(ptrace(PTRACE_SETREGS, tracee, NULL, &regs) < 0) {
+            perror("ptrace setregs");
+            suicide();
+        }
+    }
+
+    printf(" => ");
+    print_syscall_entry(&regs);
 }
 
 void monitor() {
@@ -112,6 +157,7 @@ void monitor() {
         if(entry) {
             get_regs(&regs_entry);
             print_syscall_entry(&regs_entry);
+            interpose(regs_entry);
         }else {
             get_regs(&regs_exit);
             print_syscall_exit(&regs_exit);
