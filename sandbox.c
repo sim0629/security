@@ -125,7 +125,40 @@ void sandbox(struct user_regs_struct *regs_p) {
     }
 }
 
-void monitor() {
+unsigned long long entry_point(const char *elf) {
+    char buf[1024];
+    FILE *f;
+    unsigned long long ret;
+
+    sprintf(buf, "readelf -h \"%s\"", elf);
+    f = popen(buf, "r");
+    while(!feof(f)) {
+        fgets(buf, sizeof(buf), f);
+        if(sscanf(buf, " Entry point address: %llx", &ret) == 1)
+            break;
+    }
+    pclose(f);
+
+    return ret;
+}
+
+void trap(const char *elf) {
+    int status;
+    struct user_regs_struct regs;
+    unsigned long long addr = entry_point(elf);
+    unsigned long long data = ptrace(PTRACE_PEEKTEXT, tracee, (void *)addr, 0);
+    unsigned long long data_with_trap = (data & 0xFFFFFF00) | 0xCC;
+
+    ptrace(PTRACE_POKETEXT, tracee, (void *)addr, (void *)data_with_trap);
+    ptrace(PTRACE_CONT, tracee, 0, 0);
+    wait(NULL);
+    ptrace(PTRACE_GETREGS, tracee, 0, &regs);
+    ptrace(PTRACE_POKETEXT, tracee, (void *)addr, (void *)data);
+    regs.rip -= 1;
+    ptrace(PTRACE_SETREGS, tracee, 0, &regs);
+}
+
+void monitor(const char *elf) {
     struct user_regs_struct regs_entry;
     struct user_regs_struct regs_exit;
     bool entry = false;
@@ -133,9 +166,7 @@ void monitor() {
     if(wait_tracee() < 0) {
         return;
     }
-    get_regs(&regs_entry);
-    print_syscall_entry(&regs_entry);
-    print_syscall_exit(&regs_entry);
+    trap(elf);
 
     while(true) {
         continue_tracee();
@@ -191,7 +222,7 @@ int main(int argc, char *argv[]) {
             return 0;
         }
     }else { // tracer
-        monitor();
+        monitor(argv[offset]);
     }
 
     return 0;
