@@ -1,8 +1,13 @@
 CC=gcc
 CFLAGS=
 
-hello:
-	$(CC) -o $@ hello.c $(CFLAGS)
+all: hello alloc
+
+hello: hello.c
+	$(CC) -o $@ $< $(CFLAGS)
+
+alloc: alloc.c
+	$(CC) -o $@ $< $(CFLAGS)
 
 clean:
 	rm -f hello

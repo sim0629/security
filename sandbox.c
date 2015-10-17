@@ -8,6 +8,8 @@
 #include <sys/user.h>
 #include <asm/ptrace-abi.h>
 
+#include "sgm_syscallent.h"
+
 static pid_t tracee;
 
 void suicide() {
@@ -44,19 +46,46 @@ void get_regs(struct user_regs_struct *regs_p) {
     }
 }
 
-void print_syscall(struct user_regs_struct *regs_p) {
-    printf("%llu\n", regs_p->orig_rax);
+void print_syscall(struct user_regs_struct *regs_entry_p, struct user_regs_struct *regs_exit_p) {
+    unsigned long long n = regs_entry_p->orig_rax;
+    unsigned long long args[6] = {
+        regs_entry_p->rdi,
+        regs_entry_p->rsi,
+        regs_entry_p->rdx,
+        regs_entry_p->r10,
+        regs_entry_p->r8,
+        regs_entry_p->r9,
+    };
+    int i;
+
+    printf("%s ( ", ents[n].name);
+    if(ents[n].argc < 0) {
+        for(i = 0; i < 6; i++) {
+            printf("0x%Lx", args[i]);
+            if(i < 5) printf(", ");
+            else printf(" )");
+        }
+        printf("?");
+    }else {
+        for(i = 0; i < ents[n].argc; i++) {
+            printf("0x%Lx", args[i]);
+            if(i < ents[n].argc - 1) printf(", ");
+            else printf(" )");
+        }
+    }
+    printf(" = 0x%Lx\n", regs_exit_p->rax);
 }
 
 void monitor() {
-    struct user_regs_struct regs;
+    struct user_regs_struct regs_entry;
+    struct user_regs_struct regs_exit;
     bool entry = false;
 
     if(wait_tracee() < 0) {
         return;
     }
-    get_regs(&regs);
-    print_syscall(&regs);
+    get_regs(&regs_entry);
+    print_syscall(&regs_entry, &regs_entry);
 
     while(true) {
         continue_tracee();
@@ -66,8 +95,10 @@ void monitor() {
         entry = !entry;
 
         if(entry) {
-            get_regs(&regs);
-            print_syscall(&regs);
+            get_regs(&regs_entry);
+        }else {
+            get_regs(&regs_exit);
+            print_syscall(&regs_entry, &regs_exit);
         }
     }
 }
