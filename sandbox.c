@@ -120,6 +120,13 @@ void sandbox(struct user_regs_struct *regs_p) {
         if(my_pcy.kill) suicide();
         break;
 
+    case SYS_clone:
+    case SYS_fork:
+    case SYS_vfork:
+        print_encounter("clone");
+        if(my_pcy.kill) suicide();
+        break;
+
     default:
         break;
     }
