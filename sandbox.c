@@ -24,7 +24,7 @@ int wait_tracee() {
         suicide();
     }
     if(WIFEXITED(status) || WIFSIGNALED(status)) {
-        printf("tracee exited\n");
+        fprintf(stderr, "tracee exited\n");
         return -1;
     }
     return 0;
