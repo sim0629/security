@@ -1,13 +1,20 @@
 CC=gcc
-CFLAGS=
+CFLAGS=-lrt
+EXE=alloc hello process shm
 
-all: hello alloc
-
-hello: hello.c
-	$(CC) -o $@ $< $(CFLAGS)
+all: $(EXE)
 
 alloc: alloc.c
 	$(CC) -o $@ $< $(CFLAGS)
 
+hello: hello.c
+	$(CC) -o $@ $< $(CFLAGS)
+
+process: process.c
+	$(CC) -o $@ $< $(CFLAGS)
+
+shm: shm.c
+	$(CC) -o $@ $< $(CFLAGS)
+
 clean:
-	rm -f hello
+	rm -f $(EXE)
