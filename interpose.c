@@ -13,6 +13,16 @@
 
 static pid_t tracee;
 
+static struct pcy {
+    bool bypass;
+    unsigned long long number;
+    int cond_idx;
+    unsigned long long cond_val;
+    int chg_idx;
+    bool chg_ref;
+    unsigned long long chg_val;
+} my_pcy;
+
 void suicide() {
     if(kill(tracee, SIGKILL) < 0) {
         perror("kill");
@@ -80,7 +90,7 @@ void print_syscall_exit(struct user_regs_struct *regs_p) {
     printf(" = 0x%Lx\n", regs_p->rax);
 }
 
-void monitor(const char *policy) {
+void monitor() {
     struct user_regs_struct regs_entry;
     struct user_regs_struct regs_exit;
     bool entry = false;
@@ -106,6 +116,56 @@ void monitor(const char *policy) {
             get_regs(&regs_exit);
             print_syscall_exit(&regs_exit);
         }
+    }
+}
+
+void parse_pcy(const char *policy) {
+    FILE *f = NULL;
+    char line[256];
+    char *line_p;
+
+    f = fopen(policy, "r");
+    if(f == NULL) {
+        perror("fopen policy");
+        return;
+    }
+
+    if(fgets(line, sizeof(line), f) == NULL)
+        goto error;
+    if(sscanf(line, "%llu", &my_pcy.number) < 1)
+        goto error;
+
+    if(fgets(line, sizeof(line), f) == NULL)
+        goto error;
+    if(line[0] == '*') {
+        my_pcy.cond_idx = -1;
+    }else {
+        if(sscanf(line, "[%d] == %llu", &my_pcy.cond_idx, &my_pcy.cond_val) < 2)
+            goto error;
+    }
+
+    if(fgets(line, sizeof(line), f) == NULL)
+        goto error;
+    if(line[0] == '*') {
+        my_pcy.chg_ref = true;
+        line_p = line + 1;
+    }else {
+        my_pcy.chg_ref = false;
+        line_p = line;
+    }
+    if(sscanf(line_p, "[%d] = %llu", &my_pcy.chg_idx, &my_pcy.chg_val) < 2)
+        goto error;
+
+    fclose(f);
+
+    my_pcy.bypass = false;
+    return;
+
+error:
+    fprintf(stderr, "Fail to parse policy. Assume it empty.\n");
+    if(f != NULL) {
+        fclose(f);
+        f = NULL;
     }
 }
 
@@ -146,7 +206,10 @@ int main(int argc, char *argv[]) {
             return 0;
         }
     }else { // tracer
-        monitor(policy);
+        my_pcy.bypass = true;
+        if(policy != NULL)
+            parse_pcy(policy);
+        monitor();
     }
 
     return 0;
