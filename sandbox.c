@@ -46,15 +46,15 @@ void get_regs(struct user_regs_struct *regs_p) {
     }
 }
 
-void print_syscall(struct user_regs_struct *regs_entry_p, struct user_regs_struct *regs_exit_p) {
-    unsigned long long n = regs_entry_p->orig_rax;
+void print_syscall_entry(struct user_regs_struct *regs_p) {
+    unsigned long long n = regs_p->orig_rax;
     unsigned long long args[6] = {
-        regs_entry_p->rdi,
-        regs_entry_p->rsi,
-        regs_entry_p->rdx,
-        regs_entry_p->r10,
-        regs_entry_p->r8,
-        regs_entry_p->r9,
+        regs_p->rdi,
+        regs_p->rsi,
+        regs_p->rdx,
+        regs_p->r10,
+        regs_p->r8,
+        regs_p->r9,
     };
     int i;
 
@@ -73,7 +73,10 @@ void print_syscall(struct user_regs_struct *regs_entry_p, struct user_regs_struc
             else printf(" )");
         }
     }
-    printf(" = 0x%Lx\n", regs_exit_p->rax);
+}
+
+void print_syscall_exit(struct user_regs_struct *regs_p) {
+    printf(" = 0x%Lx\n", regs_p->rax);
 }
 
 void monitor() {
@@ -85,7 +88,8 @@ void monitor() {
         return;
     }
     get_regs(&regs_entry);
-    print_syscall(&regs_entry, &regs_entry);
+    print_syscall_entry(&regs_entry);
+    print_syscall_exit(&regs_entry);
 
     while(true) {
         continue_tracee();
@@ -96,9 +100,10 @@ void monitor() {
 
         if(entry) {
             get_regs(&regs_entry);
+            print_syscall_entry(&regs_entry);
         }else {
             get_regs(&regs_exit);
-            print_syscall(&regs_entry, &regs_exit);
+            print_syscall_exit(&regs_exit);
         }
     }
 }
