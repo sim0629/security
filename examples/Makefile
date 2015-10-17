@@ -1,10 +1,13 @@
 CC=gcc
 CFLAGS=-lrt
-EXE=alloc hello process shm
+EXE=alloc file hello process shm
 
 all: $(EXE)
 
 alloc: alloc.c
+	$(CC) -o $@ $< $(CFLAGS)
+
+file: file.c
 	$(CC) -o $@ $< $(CFLAGS)
 
 hello: hello.c
