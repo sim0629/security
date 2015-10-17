@@ -21,6 +21,7 @@ static struct pcy {
     int chg_idx;
     bool chg_ref;
     unsigned long long chg_val;
+    int chg_cnt_idx;
 } my_pcy;
 
 void suicide() {
@@ -112,9 +113,13 @@ void interpose(struct user_regs_struct regs) {
     }
 
     if(my_pcy.chg_ref) {
-        if(ptrace(PTRACE_POKEDATA, tracee, *args_p[my_pcy.chg_idx], my_pcy.chg_val) < 0) {
-            perror("ptrace pokedata");
-            suicide();
+        unsigned long long len = *args_p[my_pcy.chg_cnt_idx];
+        unsigned long long i;
+        for(i = 0; i < len; i += sizeof(unsigned long long)) {
+            if(ptrace(PTRACE_POKEDATA, tracee, *args_p[my_pcy.chg_idx] + i, my_pcy.chg_val) < 0) {
+                perror("ptrace pokedata");
+                suicide();
+            }
         }
     }else {
         if(my_pcy.chg_idx < 0) {
@@ -168,7 +173,6 @@ void monitor() {
 void parse_pcy(const char *policy) {
     FILE *f = NULL;
     char line[256];
-    char *line_p;
 
     f = fopen(policy, "r");
     if(f == NULL) {
@@ -194,13 +198,13 @@ void parse_pcy(const char *policy) {
         goto error;
     if(line[0] == '*') {
         my_pcy.chg_ref = true;
-        line_p = line + 1;
+        if(sscanf(line + 1, "[%d] = %llu * [%d]", &my_pcy.chg_idx, &my_pcy.chg_val, &my_pcy.chg_cnt_idx) < 3)
+            goto error;
     }else {
         my_pcy.chg_ref = false;
-        line_p = line;
+        if(sscanf(line, "[%d] = %llu", &my_pcy.chg_idx, &my_pcy.chg_val) < 2)
+            goto error;
     }
-    if(sscanf(line_p, "[%d] = %llu", &my_pcy.chg_idx, &my_pcy.chg_val) < 2)
-        goto error;
 
     fclose(f);
 
